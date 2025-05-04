@@ -83,7 +83,7 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
       if (data) {
         console.log('[AnamnesisForm] Data found, processing:', data);
         // Format date for input field if it exists
-        let processedData = { ...data }; // Clone data to avoid modifying the original object directly
+        const processedData = { ...data }; // Clone data to avoid modifying the original object directly
         if (processedData.last_straightening_date) {
           try {
             processedData.last_straightening_date = new Date(processedData.last_straightening_date).toISOString().split('T')[0];
@@ -166,19 +166,19 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
     delete dataToSave.created_at;
     delete dataToSave.updated_at;
 
-    console.log('[AnamnesisForm] Data prepared for upsert:', dataToSave);
+    console.log('[AnamnesisForm] Data prepared for insert:', dataToSave);
 
     try {
-      console.log('[AnamnesisForm] Calling Supabase upsert...');
+      console.log("[AnamnesisForm] Calling Supabase insert...");
       const { error: saveError } = await supabase
-        .from('client_anamnesis')
-        .upsert(dataToSave, { onConflict: 'client_id' }); // Assuming client_id is the unique constraint for upsert
+        .from("client_anamnesis")
+        .insert(dataToSave); // Changed from upsert to insert
 
-      console.log('[AnamnesisForm] Supabase upsert result:', { saveError });
+      console.log('[AnamnesisForm] Supabase insert result:', { saveError });
 
       if (saveError) throw saveError;
 
-      console.log('[AnamnesisForm] Upsert successful.');
+      console.log("[AnamnesisForm] Insert successful.");
       alert('Anamnese salva com sucesso!');
       if (onSaveSuccess) {
           console.log('[AnamnesisForm] Calling onSaveSuccess callback.');
