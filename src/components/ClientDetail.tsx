@@ -153,10 +153,11 @@ const ClientDetail = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Anamnesis Modal Trigger */}
         <Dialog open={showAnamnesisModal} onOpenChange={(isOpen) => { console.log("[ClientDetail] Anamnesis Dialog onOpenChange triggered. isOpen:", isOpen); setShowAnamnesisModal(isOpen); }}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="w-full">
+          <DialogTrigger>
+            {/* Using a standard button to test trigger issue */}
+            <button className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 w-full">
               <FileText className="mr-2 h-4 w-4" /> Ver/Editar Anamnese
-            </Button>
+            </button>
           </DialogTrigger>
           {/* Added max-h-[85vh] and overflow-y-auto for scrolling */}
           <DialogContent className="sm:max-w-[800px] max-h-[85vh] overflow-y-auto">
