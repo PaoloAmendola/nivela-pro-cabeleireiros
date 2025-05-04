@@ -57,38 +57,65 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
 
   // Fetch existing anamnesis data
   const fetchAnamnesis = useCallback(async () => {
-    if (!session?.user || !clientId) return;
+    console.log('[AnamnesisForm] fetchAnamnesis started for client:', clientId);
+    if (!session?.user || !clientId) {
+        console.log('[AnamnesisForm] fetchAnamnesis aborted: No session or clientId');
+        setLoading(false); // Ensure loading stops if aborted early
+        return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
+      console.log('[AnamnesisForm] Querying client_anamnesis table...');
+      const { data, error: fetchError, status } = await supabase
         .from('client_anamnesis')
         .select('*')
         .eq('client_id', clientId)
         .maybeSingle(); // Use maybeSingle as it might not exist yet
 
-      if (fetchError) throw fetchError;
+      console.log('[AnamnesisForm] Supabase fetch result:', { data, fetchError, status });
+
+      if (fetchError && status !== 406) { // 406 means no rows found, which is okay for maybeSingle
+          console.error('[AnamnesisForm] Supabase fetch error:', fetchError);
+          throw fetchError;
+      }
+      
       if (data) {
+        console.log('[AnamnesisForm] Data found, processing:', data);
         // Format date for input field if it exists
-        if (data.last_straightening_date) {
-          data.last_straightening_date = new Date(data.last_straightening_date).toISOString().split('T')[0];
+        let processedData = { ...data }; // Clone data to avoid modifying the original object directly
+        if (processedData.last_straightening_date) {
+          try {
+            processedData.last_straightening_date = new Date(processedData.last_straightening_date).toISOString().split('T')[0];
+            console.log('[AnamnesisForm] Formatted last_straightening_date:', processedData.last_straightening_date);
+          } catch (dateError) {
+            console.error('[AnamnesisForm] Error formatting date:', dateError);
+            processedData.last_straightening_date = null; // Set to null or keep original string if formatting fails
+          }
         }
-        setFormData(data);
+        console.log('[AnamnesisForm] Setting form data state with:', processedData);
+        setFormData(processedData);
+      } else {
+        console.log('[AnamnesisForm] No existing data found for this client.');
+        setFormData({ client_id: clientId, user_id: session.user.id }); // Reset form if no data found
       }
     } catch (err: unknown) { // Changed any to unknown
-      console.error('Error fetching anamnesis:', err);
+      console.error('[AnamnesisForm] Error in fetchAnamnesis catch block:', err);
       setError(`Erro ao carregar dados da anamnese: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     } finally {
+      console.log('[AnamnesisForm] fetchAnamnesis finished.');
       setLoading(false);
     }
   }, [supabase, session, clientId]);
 
   useEffect(() => {
+    console.log('[AnamnesisForm] useEffect triggered, calling fetchAnamnesis.');
     fetchAnamnesis();
-  }, [fetchAnamnesis]);
+  }, [fetchAnamnesis]); // Dependency array is correct
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    // console.log(`[AnamnesisForm] handleChange: name=${name}, value=${value}, type=${type}`);
     if (type === 'checkbox') {
       const { checked } = e.target as HTMLInputElement;
       setFormData(prev => ({ ...prev, [name]: checked }));
@@ -98,10 +125,12 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
   };
 
   const handleSelectChange = (name: string, value: string) => {
+    // console.log(`[AnamnesisForm] handleSelectChange: name=${name}, value=${value}`);
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleCheckboxChange = (name: string, checked: boolean | 'indeterminate') => {
+    // console.log(`[AnamnesisForm] handleCheckboxChange: name=${name}, checked=${checked}`);
     if (typeof checked === 'boolean') {
         setFormData(prev => ({ ...prev, [name]: checked }));
     }
@@ -109,7 +138,9 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    console.log('[AnamnesisForm] handleSubmit started.');
     if (!session?.user) {
+      console.error('[AnamnesisForm] handleSubmit error: User not logged in.');
       setError('Você precisa estar logado.');
       return;
     }
@@ -117,42 +148,63 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
     setSaving(true);
     setError(null);
 
-    const dataToSave: Omit<AnamnesisData, 'id' | 'created_at' | 'updated_at'> & { id?: string } = {
-      ...formData,
-      client_id: clientId,
-      user_id: session.user.id,
-      // Ensure boolean values are handled correctly (null if unchecked and field allows null)
-      has_coloration: formData.has_coloration ?? null,
-      has_highlights: formData.has_highlights ?? null,
-      is_pregnant_or_lactating: formData.is_pregnant_or_lactating ?? null,
-      // Convert date string back to null if empty
-      last_straightening_date: formData.last_straightening_date || null,
+    // Prepare data, ensuring client_id and user_id are present
+    const dataToSave: Partial<AnamnesisData> = {
+        ...formData,
+        client_id: clientId, // Ensure client_id is always included
+        user_id: session.user.id, // Ensure user_id is always included
+        // Convert empty strings back to null for optional fields if necessary
+        last_straightening_date: formData.last_straightening_date || null,
+        // Ensure boolean values are handled correctly (null if unchecked and field allows null)
+        has_coloration: formData.has_coloration ?? null,
+        has_highlights: formData.has_highlights ?? null,
+        is_pregnant_or_lactating: formData.is_pregnant_or_lactating ?? null,
     };
 
+    // Remove id, created_at, updated_at before upsert if they exist in formData
+    delete dataToSave.id;
+    delete dataToSave.created_at;
+    delete dataToSave.updated_at;
+
+    console.log('[AnamnesisForm] Data prepared for upsert:', dataToSave);
+
     try {
+      console.log('[AnamnesisForm] Calling Supabase upsert...');
       const { error: saveError } = await supabase
         .from('client_anamnesis')
-        .upsert(dataToSave, { onConflict: 'client_id' }); // Upsert based on client_id
+        .upsert(dataToSave, { onConflict: 'client_id' }); // Assuming client_id is the unique constraint for upsert
+
+      console.log('[AnamnesisForm] Supabase upsert result:', { saveError });
 
       if (saveError) throw saveError;
 
+      console.log('[AnamnesisForm] Upsert successful.');
       alert('Anamnese salva com sucesso!');
-      if (onSaveSuccess) onSaveSuccess();
-      // Optionally refetch data or update state locally
+      if (onSaveSuccess) {
+          console.log('[AnamnesisForm] Calling onSaveSuccess callback.');
+          onSaveSuccess();
+      }
+      // Refetch data after successful save to update the form state
+      console.log('[AnamnesisForm] Refetching data after save...');
       fetchAnamnesis(); 
 
     } catch (err: unknown) { // Changed any to unknown
-      console.error('Error saving anamnesis:', err);
+      console.error('[AnamnesisForm] Error in handleSubmit catch block:', err);
       setError(`Erro ao salvar anamnese: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     } finally {
+      console.log('[AnamnesisForm] handleSubmit finished.');
       setSaving(false);
     }
   };
 
+  // Render Loading state
   if (loading) {
+    console.log('[AnamnesisForm] Rendering loading state.');
     return <div>Carregando formulário de anamnese...</div>;
   }
 
+  // Render Form
+  console.log('[AnamnesisForm] Rendering form with data:', formData);
   return (
     <Card className="w-full">
       <CardHeader>
@@ -323,23 +375,15 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ clientId, onSaveSuccess }
             <div className="grid grid-cols-1 gap-4 mt-2">
               <div className="space-y-2">
                 <Label htmlFor="strand_test_result">Resultado do Teste de Mecha</Label>
-                <Textarea id="strand_test_result" name="strand_test_result" value={formData.strand_test_result || ''} onChange={handleChange} placeholder="Descreva o resultado do teste de mecha (elasticidade, resistência, compatibilidade)..." />
+                <Textarea id="strand_test_result" name="strand_test_result" value={formData.strand_test_result || ''} onChange={handleChange} placeholder="Descreva o resultado do teste de mecha..." />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="professional_observations">Observações Profissionais</Label>
-                <Textarea id="professional_observations" name="professional_observations" value={formData.professional_observations || ''} onChange={handleChange} placeholder="Outras observações relevantes sobre o cabelo ou couro cabeludo..." />
+                <Label htmlFor="professional_observations">Observações do Profissional</Label>
+                <Textarea id="professional_observations" name="professional_observations" value={formData.professional_observations || ''} onChange={handleChange} placeholder="Outras observações relevantes..." />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="recommended_procedure">Procedimento Recomendado</Label>
-                <Select name="recommended_procedure" value={formData.recommended_procedure || ''} onValueChange={(value) => handleSelectChange('recommended_procedure', value)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Nivela Standard">Nivela Standard</SelectItem>
-                    <SelectItem value="Nivela Blond">Nivela Blond (Cuidado Redobrado)</SelectItem>
-                    <SelectItem value="Nao Recomendar">Não Recomendar Procedimento</SelectItem>
-                    <SelectItem value="Outro">Outro Tratamento</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Textarea id="recommended_procedure" name="recommended_procedure" value={formData.recommended_procedure || ''} onChange={handleChange} placeholder="Descreva o procedimento a ser realizado..." />
               </div>
             </div>
           </fieldset>
