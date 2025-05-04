@@ -160,6 +160,7 @@ const ClientDetail = () => {
           </DialogTrigger>
           {/* Added max-h-[85vh] and overflow-y-auto for scrolling */}
           <DialogContent className="sm:max-w-[800px] max-h-[85vh] overflow-y-auto">
+            {console.log("[ClientDetail] Anamnesis DialogContent rendering...")}
             <AnamnesisForm clientId={clientId} onSaveSuccess={handleAnamnesisSaveSuccess} />
           </DialogContent>
         </Dialog>
