@@ -152,7 +152,7 @@ const ClientDetail = () => {
       {/* Action Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Anamnesis Modal Trigger */}
-        <Dialog open={showAnamnesisModal} onOpenChange={setShowAnamnesisModal}>
+        <Dialog open={showAnamnesisModal} onOpenChange={(isOpen) => { console.log("[ClientDetail] Anamnesis Dialog onOpenChange triggered. isOpen:", isOpen); setShowAnamnesisModal(isOpen); }}>
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full">
               <FileText className="mr-2 h-4 w-4" /> Ver/Editar Anamnese
